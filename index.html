@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eMAXIS Slim 米国株式(S&amp;P500) 騰落率トラッカー</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #1a1f2e;
+  --border: #30363d; --text: #e6edf3; --text-dim: #8b949e; --text-dark: #484f58;
+  --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+  --btn-bg: #238636; --btn-fg: #ffffff;
+  --chart-grid: #21262d; --row-alt: #161b22; --row-normal: #0d1117;
+  --red-bg: rgba(248,81,73,0.1);
+}
+[data-theme="light"] {
+  --bg: #ffffff; --bg2: #f6f8fa; --bg3: #e8ecf0;
+  --border: #d0d7de; --text: #1f2328; --text-dim: #656d76; --text-dark: #8b949e;
+  --accent: #0969da; --green: #1a7f37; --red: #cf222e;
+  --btn-bg: #2da44e; --btn-fg: #ffffff;
+  --chart-grid: #e0e0e0; --row-alt: #f6f8fa; --row-normal: #ffffff;
+  --red-bg: rgba(207,34,46,0.08);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow-x: hidden; }
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif; }
+.header { background: var(--bg3); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+.header-title { font-size: 15px; font-weight: bold; color: var(--accent); }
+.header-actions { display: flex; gap: 8px; }
+.btn { border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 12px; font-weight: 600; transition: opacity 0.2s; }
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: var(--btn-bg); color: var(--btn-fg); }
+.btn-secondary { background: var(--bg2); color: var(--text-dim); border: 1px solid var(--border); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.summary { display: flex; gap: 28px; padding: 12px 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: var(--bg); }
+.summary-item .label { font-size: 10px; color: var(--text-dim); margin-bottom: 1px; }
+.summary-item .value { font-size: 18px; font-weight: bold; }
+.charts-area { padding: 12px 24px 8px; background: var(--bg); }
+.chart-container { background: var(--bg2); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--border); }
+.chart-label { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.chart-wrapper { position: relative; width: 100%; overflow: hidden; }
+.chart-wrapper-nav { height: 300px; }
+.chart-wrapper canvas { position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; }
+.table-area { padding: 0 24px 12px; background: var(--bg); }
+.table-wrapper { max-height: 260px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead { position: sticky; top: 0; z-index: 1; }
+th { text-align: center; padding: 8px 6px; background: var(--bg2); color: var(--text-dim); font-weight: 600; font-size: 10px; border-bottom: 1px solid var(--border); letter-spacing: 0.3px; }
+td { padding: 6px; text-align: center; border-bottom: 1px solid var(--border); }
+tr:nth-child(odd) td { background: var(--row-normal); }
+tr:nth-child(even) td { background: var(--row-alt); }
+tr:hover td { background: var(--bg3); }
+.cell-up { color: var(--green); font-weight: 600; }
+.cell-down { color: var(--red); font-weight: 600; }
+.footer { padding: 8px 24px; font-size: 10px; color: var(--text-dark); display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); background: var(--bg); }
+.footer-row { display: flex; justify-content: space-between; align-items: center; }
+.adca-row { display: flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 14px; }
+.adca-row select { background: var(--bg2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 14px; cursor: pointer; }
+.adca-row .adca-days { color: var(--accent); font-weight: 600; }
+.loading-cell { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text-dim); font-size: 13px; }
+.spinner { width: 20px; height: 20px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-box { margin: 12px 24px; padding: 12px 16px; border-radius: 8px; background: var(--red-bg); border: 1px solid var(--red); color: var(--red); font-size: 12px; display: none; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="header-title">eMAXIS Slim 米国株式(S&amp;P500) <a href="https://nathenfake.github.io/fang/" style="font-size: 11px; font-weight: normal; color: var(--text-dim); text-decoration: none; opacity: 0.8; margin-left: 4px;" onmouseover="this.style.opacity=&#39;1&#39;;this.style.color=&#39;var(--accent)&#39;" onmouseout="this.style.opacity=&#39;0.8&#39;;this.style.color=&#39;var(--text-dim)&#39;">FANG+</a></span>
+  <div class="header-actions">
+    <button class="btn btn-secondary" id="themeBtn" onclick="toggleTheme()">☀ ライト</button>
+    <button class="btn btn-primary" id="updateBtn" onclick="updateData()">🔄 データ更新</button>
+  </div>
+</div>
+<div class="summary">
+  <div class="summary-item"><div class="label">基準価額</div><div class="value" id="s-nav">--</div></div>
+  <div class="summary-item"><div class="label">騰落率</div><div class="value" id="s-diff">--</div></div>
+  <div class="summary-item"><div class="label">ATH</div><div class="value" id="s-ath">--</div></div>
+  <div class="summary-item"><div class="label">ATHからの下落</div><div class="value" id="s-dd">--</div></div>
+  <div class="summary-item"><div class="label">ATH復帰に必要な上昇</div><div class="value" id="s-recover">--</div></div>
+  <div class="summary-item"><div class="label">USD/JPY</div><div class="value" id="s-fx">--</div></div>
+</div>
+<div class="error-box" id="errorBox" style="display: none;"></div>
+<div class="charts-area">
+  <div class="chart-container">
+    <div class="chart-label">基準価額 / USD/JPY 推移（4ヶ月）</div>
+    <div class="chart-wrapper chart-wrapper-nav"><canvas id="navChart"></canvas></div>
+  </div>
+</div>
+<div class="table-area">
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>日付</th><th>基準価額</th><th>騰落率(%)</th><th>ATH下落率(%)</th><th>ATH復帰(%)</th><th>USD/JPY</th></tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+<div class="footer">
+  <div class="adca-row">
+    <span>ADCA比率</span>
+    <select id="adcaBase" onchange="updateADCA()">
+      <option value="500">500万</option><option value="600">600万</option><option value="700">700万</option><option value="800">800万</option><option value="900">900万</option><option value="1000">1000万</option><option value="1100">1100万</option><option value="1200">1200万</option><option value="1300">1300万</option><option value="1400">1400万</option><option value="1500">1500万</option><option value="1600">1600万</option><option value="1700">1700万</option><option value="1800" selected="">1800万</option>
+    </select>
+    <span>=</span>
+    <select id="adcaX" onchange="updateADCA()">
+      <option value="3">3</option><option value="5">5</option><option value="7">7</option><option value="10">10</option><option value="15">15</option><option value="18">18</option><option value="20">20</option><option value="25">25</option><option value="30">30</option><option value="35">35</option>
+    </select>
+    <span>万/日 × <span class="adca-days" id="adcaDays">600</span> 日</span>
+    <span>｜</span>
+    <span>約 <span class="adca-days" id="adcaMonths">30</span>ヶ月と<span class="adca-days" id="adcaRemain">0</span>日</span>
+    <span class="adca-days" id="adcaTargetDate"></span>
+  </div>
+  <div class="footer-row">
+    <span id="statusText">読み込み中...</span>
+    <span>データ: 三菱UFJアセットマネジメント</span>
+  </div>
+</div>
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz08VLIO3xVse0sMVr2OoeDohu3Svikcw7cM2Uw3-t7tOuH_Q--d-gihp_jKP71p48/exec';
+const MONTHS_HISTORY = 4;
+let navChart = null;
+let currentTheme = 'dark';
+
+const CACHE_KEY = 'sp500_cache';
+const UPDATE_HOUR = 23;
+
+function getLastScheduledTime() {
+  const now = new Date();
+  const today23 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), UPDATE_HOUR, 0, 0);
+  return now >= today23 ? today23 : new Date(today23.getTime() - 86400000);
+}
+
+function saveCache(data) {
+  const serialized = data.map(d => ({ ...d, date: d.date.toISOString() }));
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: serialized }));
+}
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.ts < getLastScheduledTime().getTime()) return null;
+    return parsed.data.map(d => ({ ...d, date: new Date(d.date) }));
+  } catch { return null; }
+}
+
+function scheduleNextUpdate() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), UPDATE_HOUR, 0, 0);
+  if (now >= next) next.setDate(next.getDate() + 1);
+  setTimeout(() => { updateData(); scheduleNextUpdate(); }, next.getTime() - now.getTime());
+}
+
+function toggleTheme() {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  if (currentTheme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.getElementById('themeBtn').textContent = '🌙 ダーク';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('themeBtn').textContent = '☀ ライト';
+  }
+  if (window._lastData) renderAll(window._lastData);
+}
+
+function getColors() {
+  const s = getComputedStyle(document.documentElement);
+  const g = k => s.getPropertyValue(k).trim();
+  return { text: g('--text'), textDim: g('--text-dim'), accent: g('--accent'), green: g('--green'), red: g('--red'), grid: g('--chart-grid'), bg2: g('--bg2') };
+}
+
+async function fetchCSV() {
+  const resp = await fetch(GAS_URL);
+  if (!resp.ok) throw new Error(`GAS応答エラー: HTTP ${resp.status}`);
+  const json = await resp.json();
+  if (json.error) throw new Error(`GASエラー: ${json.error}`);
+  if (!json.data || !json.data.length) throw new Error('データが空です');
+  return json.data.map(d => ({ date: new Date(+d.date.slice(0,4), +d.date.slice(4,6)-1, +d.date.slice(6,8)), nav: d.nav, diff: d.diff }));
+}
+
+async function fetchUSDJPY(start, end) {
+  try {
+    const resp = await fetch(`https://api.frankfurter.dev/v1/${fmt(start)}..${fmt(end)}?base=USD&symbols=JPY`, { signal: AbortSignal.timeout(15000) });
+    const json = await resp.json();
+    const rates = {};
+    if (json.rates) for (const [d, r] of Object.entries(json.rates)) if (r.JPY) rates[d] = r.JPY;
+    return rates;
+  } catch (e) { console.warn('USDJPY fetch failed:', e); return {}; }
+}
+
+function fmt(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function processData(raw, fxRates) {
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - MONTHS_HISTORY);
+  const filtered = raw.filter(d => d.date >= cutoff);
+  if (!filtered.length) return [];
+  let ath = 0;
+  raw.forEach(d => { if (d.nav > ath) ath = d.nav; });
+  return filtered.map(d => {
+    const prev = d.nav - d.diff;
+    const returnRate = (prev > 0 && d.diff !== 0) ? (d.diff / prev * 100) : 0;
+    const athDD = d.nav < ath ? ((d.nav - ath) / ath * 100) : 0;
+    const ds = fmt(d.date);
+    let fx = fxRates[ds] || null;
+    if (!fx) { for (let off = 1; off <= 4 && !fx; off++) { for (const delta of [-off, off]) { const check = new Date(d.date); check.setDate(check.getDate() + delta); if (fxRates[fmt(check)]) { fx = fxRates[fmt(check)]; break; } } } }
+    const athRecover = d.nav < ath ? ((ath - d.nav) / d.nav * 100) : 0;
+    return { date: d.date, nav: d.nav, diff: d.diff, returnRate, ath, athDD, athRecover, fx };
+  });
+}
+
+async function updateData() {
+  const btn = document.getElementById('updateBtn'), status = document.getElementById('statusText'), errBox = document.getElementById('errorBox');
+  btn.disabled = true; btn.textContent = '⏳ 取得中...'; status.textContent = 'データ取得中...'; errBox.style.display = 'none';
+  try {
+    const raw = await fetchCSV();
+    if (!raw.length) throw new Error('CSVにデータがありません');
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - MONTHS_HISTORY);
+    const filtered = raw.filter(d => d.date >= cutoff);
+    const dates = filtered.map(d => d.date);
+    const fxRates = await fetchUSDJPY(new Date(Math.min(...dates)), new Date(Math.max(...dates)));
+    const data = processData(raw, fxRates);
+    window._lastData = data;
+    renderAll(data);
+    saveCache(data);
+    const now = new Date();
+    status.textContent = `最終更新: ${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  } catch (e) {
+    errBox.textContent = `⚠ ${e.message}`; errBox.style.display = 'block'; status.textContent = 'エラーが発生しました'; console.error(e);
+  } finally { btn.disabled = false; btn.textContent = '🔄 データ更新'; }
+}
+
+function renderAll(data) { if (!data.length) return; renderSummary(data); renderCharts(data); renderTable(data); }
+
+function renderSummary(data) {
+  const d = data[data.length - 1], c = getColors();
+  document.getElementById('s-nav').textContent = d.nav.toLocaleString(); document.getElementById('s-nav').style.color = c.text;
+  const s2 = d.returnRate >= 0 ? '+' : '';
+  const el = document.getElementById('s-diff');
+  el.textContent = `${s2}${d.returnRate.toFixed(2)}%`; el.style.color = d.diff >= 0 ? c.green : c.red;
+  document.getElementById('s-ath').textContent = d.ath.toLocaleString(); document.getElementById('s-ath').style.color = c.text;
+  const dd = document.getElementById('s-dd'); dd.textContent = d.athDD < 0 ? `${d.athDD.toFixed(2)}%` : 'ATH!'; dd.style.color = d.athDD < 0 ? c.red : c.green;
+  const rc = document.getElementById('s-recover'); rc.textContent = d.athRecover > 0 ? `+${d.athRecover.toFixed(2)}%` : '--'; rc.style.color = d.athRecover > 0 ? c.green : c.text;
+  const fx = document.getElementById('s-fx'); fx.textContent = d.fx ? d.fx.toFixed(2) : '--'; fx.style.color = c.text;
+}
+
+function renderCharts(data) {
+  const c = getColors(), labels = data.map(d => d.date), navs = data.map(d => d.nav);
+  const fxVals = data.map(d => d.fx);
+  const fxColor = '#e8b004';
+  if (navChart) navChart.destroy();
+  const ctx1 = document.getElementById('navChart').getContext('2d');
+  const grad = ctx1.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0, c.accent + '33'); grad.addColorStop(1, c.accent + '05');
+  navChart = new Chart(ctx1, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: '基準価額', data: navs, borderColor: c.accent, backgroundColor: grad, fill: true, borderWidth: 2, pointRadius: 0, pointHitRadius: 8, tension: 0.3, yAxisID: 'y' },
+      { label: 'USD/JPY', data: fxVals, borderColor: fxColor + '55', backgroundColor: 'transparent', fill: false, borderWidth: 1.5, pointRadius: 0, pointHitRadius: 8, tension: 0.3, yAxisID: 'yFx', hidden: true }
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 600 },
+      layout: { padding: { top: 4, bottom: 4 } },
+      plugins: { legend: { display: true, labels: { color: c.textDim, font: { size: 10 }, boxWidth: 20, padding: 12 } }, tooltip: {
+        backgroundColor: c.bg2, titleColor: c.textDim, bodyColor: c.text, borderColor: c.accent, borderWidth: 1,
+        callbacks: { label: function(ctx) {
+          if (ctx.datasetIndex === 0) {
+            const i = ctx.dataIndex, d = window._lastData[i];
+            const lines = [`基準価額: ${ctx.raw.toLocaleString()}`];
+            if (d && d.athDD < 0) lines.push(`ATH下落率: ${d.athDD.toFixed(2)}%`);
+            else if (d) lines.push(`ATH下落率: -- (ATH!)`);
+            if (d && d.returnRate != null) { const sign = d.returnRate >= 0 ? '+' : ''; lines.push(`騰落率: ${sign}${d.returnRate.toFixed(2)}%`); }
+            return lines;
+          }
+          return ctx.raw != null ? `USD/JPY: ${ctx.raw.toFixed(2)}` : null;
+        }}
+      }},
+      scales: {
+        x: { type: 'time', time: { unit: 'week', displayFormats: { week: 'MM/dd' } }, grid: { color: c.grid + '44' }, ticks: { color: c.textDim, font: { size: 10 }, maxTicksLimit: 12 } },
+        y: { position: 'left', grid: { color: c.grid + '44' }, ticks: { color: c.textDim, font: { size: 10 }, callback: v => v.toLocaleString(), maxTicksLimit: 6 } },
+        yFx: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: fxColor + '88', font: { size: 9 }, callback: v => v.toFixed(1), maxTicksLimit: 5 } }
+      },
+      interaction: { intersect: false, mode: 'index' },
+    }
+  });
+}
+
+function renderTable(data) {
+  document.getElementById('tableBody').innerHTML = [...data].reverse().map(d => {
+    const ds = `${d.date.getFullYear()}/${String(d.date.getMonth()+1).padStart(2,'0')}/${String(d.date.getDate()).padStart(2,'0')}`;
+    const s = d.diff >= 0 ? '+' : '', rs = d.returnRate >= 0 ? '+' : '', cls = d.diff >= 0 ? 'cell-up' : 'cell-down';
+    return `<tr><td>${ds}</td><td>${d.nav.toLocaleString()}</td><td class="${cls}">${rs}${d.returnRate.toFixed(2)}</td><td class="${d.athDD<0?'cell-down':''}">${d.athDD<0?d.athDD.toFixed(2):'--'}</td><td class="${d.athRecover>0?'cell-up':''}">${d.athRecover>0?'+'+d.athRecover.toFixed(2):'--'}</td><td>${d.fx?d.fx.toFixed(2):'--'}</td></tr>`;
+  }).join('');
+}
+
+function addBusinessDays(startDate, n) {
+  const date = new Date(startDate);
+  let count = 0;
+  while (count < n) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) count++;
+  }
+  return date;
+}
+function updateADCA() {
+  const base = parseInt(document.getElementById('adcaBase').value);
+  const x = parseInt(document.getElementById('adcaX').value);
+  const days = Math.round(base / x);
+  const months = Math.floor(days / 20);
+  const remain = days % 20;
+  document.getElementById('adcaDays').textContent = days;
+  document.getElementById('adcaMonths').textContent = months;
+  document.getElementById('adcaRemain').textContent = remain;
+  const target = addBusinessDays(new Date(), days);
+  const y = target.getFullYear();
+  const m = target.getMonth() + 1;
+  const d = target.getDate();
+  document.getElementById('adcaTargetDate').textContent = `（${y}年${m}月${d}日）`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const cached = loadCache();
+  const cacheHasFx = cached && cached.some(d => d.fx != null);
+  if (cached && cacheHasFx) {
+    window._lastData = cached;
+    renderAll(cached);
+    const t = new Date(JSON.parse(localStorage.getItem(CACHE_KEY)).ts);
+    document.getElementById('statusText').textContent = `キャッシュ表示 (取得: ${t.getFullYear()}/${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')})`;
+  } else {
+    updateData();
+  }
+  scheduleNextUpdate();
+  updateADCA();
+
+  document.addEventListener('touchstart', function(e) {
+    if (navChart && !document.getElementById('navChart').contains(e.target)) {
+      navChart.setActiveElements([]);
+      navChart.tooltip.setActiveElements([], {x: 0, y: 0});
+      navChart.update('none');
+    }
+  });
+});
+</script>
+</body>
+</html>
